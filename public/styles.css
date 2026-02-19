@@ -1,0 +1,249 @@
+:root {
+  --bg-0: #070913;
+  --bg-1: #0e1324;
+  --bg-2: #151c34;
+  --line: #263357;
+  --text: #e7ecff;
+  --muted: #9aa7cb;
+  --accent: #57d8ff;
+  --accent-2: #94ff84;
+  --warn: #ffd763;
+  --danger: #ff7a7a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family:
+    "IBM Plex Sans",
+    "Avenir Next",
+    "Segoe UI",
+    sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 20% -10%, #1b2952 0%, transparent 45%),
+    radial-gradient(circle at 80% 0%, #1c3043 0%, transparent 40%),
+    var(--bg-0);
+  min-height: 100vh;
+}
+
+.shell {
+  width: min(1100px, 92vw);
+  margin: 2.2rem auto 3rem;
+  display: grid;
+  gap: 1.1rem;
+}
+
+.hero {
+  background: linear-gradient(155deg, rgba(87, 216, 255, 0.16), rgba(87, 216, 255, 0.02));
+  border: 1px solid rgba(87, 216, 255, 0.3);
+  border-radius: 16px;
+  padding: 1.3rem 1.3rem 1.4rem;
+}
+
+.eyebrow {
+  margin: 0;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+h1 {
+  margin: 0.35rem 0;
+  font-size: clamp(1.6rem, 3vw, 2.35rem);
+}
+
+.subhead {
+  margin: 0;
+  color: var(--muted);
+  max-width: 72ch;
+}
+
+.mode-banner {
+  margin: 0.75rem 0 0;
+  display: inline-flex;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0.24rem 0.62rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  color: #c8d5f7;
+}
+
+.mode-banner.local-only {
+  border-color: rgba(255, 215, 99, 0.5);
+  color: var(--warn);
+}
+
+.mode-banner.full {
+  border-color: rgba(148, 255, 132, 0.5);
+  color: var(--accent-2);
+}
+
+.panel {
+  background: linear-gradient(180deg, rgba(17, 24, 45, 0.95), rgba(9, 13, 26, 0.96));
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1rem;
+}
+
+h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #d0ddff;
+}
+
+.stack {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.input-label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+input[type="file"],
+textarea {
+  width: 100%;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 0.72rem;
+  font-size: 0.92rem;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 92px;
+}
+
+button {
+  justify-self: start;
+  border: 0;
+  border-radius: 999px;
+  color: #04131d;
+  background: linear-gradient(90deg, var(--accent), #78ffd8);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  padding: 0.62rem 1.05rem;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.status-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.status {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+  gap: 0.85rem;
+}
+
+.card {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.85rem;
+}
+
+.card h3 {
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.muted-card {
+  color: var(--muted);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.56rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.badge.low {
+  background: rgba(87, 216, 255, 0.18);
+  color: var(--accent);
+}
+
+.badge.medium {
+  background: rgba(255, 215, 99, 0.2);
+  color: var(--warn);
+}
+
+.badge.high {
+  background: rgba(255, 122, 122, 0.2);
+  color: var(--danger);
+}
+
+.code-block {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+  font-size: 0.78rem;
+  color: #d6ddf6;
+}
+
+.kv-list {
+  margin: 0;
+  padding-left: 1.05rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.kv-list strong {
+  color: #dae3ff;
+}
+
+@media (max-width: 720px) {
+  .shell {
+    margin-top: 1rem;
+  }
+
+  .panel,
+  .hero {
+    border-radius: 12px;
+  }
+}

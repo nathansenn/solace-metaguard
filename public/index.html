@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GuardianScan | Metadata + Malware + Prompt Injection</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Security Analysis Workspace</p>
+        <h1>GuardianScan</h1>
+        <p class="subhead">
+          Upload images or documents to inspect metadata, run malware checks, and
+          detect AI prompt-injection patterns.
+        </p>
+        <p id="mode-banner" class="mode-banner">Loading scanner mode...</p>
+      </section>
+
+      <section class="panel">
+        <h2>Analyze File</h2>
+        <form id="analyze-form" class="stack">
+          <label class="input-label">
+            File
+            <input
+              id="file-input"
+              name="file"
+              type="file"
+              required
+              accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.txt,.md,.json,.csv,.xml"
+            />
+          </label>
+
+          <label class="input-label">
+            Additional text to scan (optional)
+            <textarea
+              id="extra-text"
+              name="extraText"
+              rows="5"
+              placeholder="Paste prompt content here for deeper prompt-injection analysis..."
+            ></textarea>
+          </label>
+
+          <button id="analyze-btn" type="submit">Run Full Analysis</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Prompt Injection Quick Scan</h2>
+        <form id="prompt-form" class="stack">
+          <label class="input-label">
+            Text payload
+            <textarea
+              id="prompt-text"
+              rows="6"
+              placeholder="Paste prompt or instruction text..."
+              required
+            ></textarea>
+          </label>
+          <button id="prompt-btn" type="submit">Scan Text</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="status-line">
+          <h2>Results</h2>
+          <p id="status" class="status muted">Idle</p>
+        </div>
+        <div id="results" class="results-grid">
+          <article class="card muted-card">
+            <h3>Waiting</h3>
+            <p>Run an analysis to see metadata, malware scan, and prompt-injection output.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
