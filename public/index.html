@@ -3,78 +3,142 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GuardianScan | Metadata + Malware + Prompt Injection</title>
+    <title>GuardianScan v2 | House of Senn</title>
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   </head>
   <body>
     <main class="shell">
-      <section class="hero">
-        <p class="eyebrow">Security Analysis Workspace</p>
-        <h1>GuardianScan</h1>
+      <!-- Header -->
+      <header class="hero">
+        <div class="hero-top">
+          <div class="logo-mark">
+            <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+              <rect width="36" height="36" rx="10" fill="url(#logo-grad)" />
+              <path d="M10 18C10 13 13 10 18 10C23 10 26 13 26 18C26 23 23 26 18 26" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+              <circle cx="18" cy="18" r="3" fill="#fff"/>
+              <defs><linearGradient id="logo-grad" x1="0" y1="0" x2="36" y2="36"><stop stop-color="#57d8ff"/><stop offset="1" stop-color="#78ffd8"/></linearGradient></defs>
+            </svg>
+            <div>
+              <h1>GuardianScan</h1>
+              <p class="tagline">House of Senn &middot; MetaGuard v2</p>
+            </div>
+          </div>
+          <div id="mode-banner" class="mode-banner"><span class="dot"></span> Loading...</div>
+        </div>
         <p class="subhead">
-          Upload images or documents to inspect metadata, run malware checks, and
-          detect AI prompt-injection patterns.
+          Upload files to inspect metadata, scan for malware, and detect AI prompt-injection patterns.
+          Supports images, PDF, DOCX, XLSX, PPTX, SVG, ZIP, EML, and text files.
         </p>
-        <p id="mode-banner" class="mode-banner">Loading scanner mode...</p>
-      </section>
+      </header>
 
-      <section class="panel">
-        <h2>Analyze File</h2>
-        <form id="analyze-form" class="stack">
-          <label class="input-label">
-            File
-            <input
-              id="file-input"
-              name="file"
-              type="file"
-              required
-              accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.txt,.md,.json,.csv,.xml"
-            />
-          </label>
+      <!-- Tab Navigation -->
+      <nav class="tab-bar">
+        <button class="tab-btn active" data-tab="file-tab">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          File Analysis
+        </button>
+        <button class="tab-btn" data-tab="text-tab">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Text Scanner
+        </button>
+      </nav>
 
-          <label class="input-label">
-            Additional text to scan (optional)
-            <textarea
-              id="extra-text"
-              name="extraText"
-              rows="5"
-              placeholder="Paste prompt content here for deeper prompt-injection analysis..."
-            ></textarea>
-          </label>
+      <!-- File Analysis Tab -->
+      <div id="file-tab" class="tab-content active">
+        <section class="panel">
+          <h2><span class="panel-icon">&#128206;</span> Analyze File</h2>
+          <form id="analyze-form" class="stack">
+            <div id="drop-zone" class="drop-zone">
+              <div class="drop-zone-inner">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <p>Drag &amp; drop a file here, or <span class="link-text">browse</span></p>
+                <p class="drop-hint">Images, PDF, DOCX, XLSX, PPTX, SVG, ZIP, EML, text &middot; Max 50 MB</p>
+              </div>
+              <input
+                id="file-input"
+                name="file"
+                type="file"
+                required
+              />
+            </div>
+            <div id="file-preview" class="file-preview hidden"></div>
 
-          <button id="analyze-btn" type="submit">Run Full Analysis</button>
-        </form>
-      </section>
+            <label class="input-label">
+              Additional text to scan <span class="optional">(optional)</span>
+              <textarea
+                id="extra-text"
+                name="extraText"
+                rows="3"
+                placeholder="Paste prompt content here for deeper prompt-injection analysis..."
+              ></textarea>
+            </label>
 
-      <section class="panel">
-        <h2>Prompt Injection Quick Scan</h2>
-        <form id="prompt-form" class="stack">
-          <label class="input-label">
-            Text payload
-            <textarea
-              id="prompt-text"
-              rows="6"
-              placeholder="Paste prompt or instruction text..."
-              required
-            ></textarea>
-          </label>
-          <button id="prompt-btn" type="submit">Scan Text</button>
-        </form>
-      </section>
+            <button id="analyze-btn" class="btn-primary" type="submit">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              Run Full Analysis
+            </button>
+          </form>
+        </section>
+      </div>
 
-      <section class="panel">
+      <!-- Text Scanner Tab -->
+      <div id="text-tab" class="tab-content">
+        <section class="panel">
+          <h2><span class="panel-icon">&#9889;</span> Prompt Injection Scanner</h2>
+          <form id="prompt-form" class="stack">
+            <label class="input-label">
+              Text payload
+              <textarea
+                id="prompt-text"
+                rows="10"
+                placeholder="Paste any prompt, instruction text, or suspicious content to scan for injection patterns across 30 detection rules..."
+                required
+              ></textarea>
+            </label>
+            <button id="prompt-btn" class="btn-primary" type="submit">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              Scan for Injection Patterns
+            </button>
+          </form>
+        </section>
+      </div>
+
+      <!-- Results -->
+      <section class="panel results-panel">
         <div class="status-line">
-          <h2>Results</h2>
-          <p id="status" class="status muted">Idle</p>
+          <h2><span class="panel-icon">&#128200;</span> Results</h2>
+          <p id="status" class="status muted">Idle &mdash; waiting for input</p>
         </div>
         <div id="results" class="results-grid">
-          <article class="card muted-card">
-            <h3>Waiting</h3>
-            <p>Run an analysis to see metadata, malware scan, and prompt-injection output.</p>
+          <article class="card empty-card">
+            <div class="empty-state">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.4">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+              <p>Upload a file or paste text to begin analysis.</p>
+            </div>
           </article>
         </div>
       </section>
+
+      <footer class="footer">
+        <p>GuardianScan v2.0 &middot; House of Senn &middot; Built by Solace &middot; 30 injection rules &middot; 10 file types</p>
+      </footer>
     </main>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
 
     <script src="/app.js" type="module"></script>
   </body>

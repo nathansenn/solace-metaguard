@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const UPLOAD_DIR = path.join(__dirname, "uploads");
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB for archives
 
 await mkdir(UPLOAD_DIR, { recursive: true });
 
@@ -30,10 +30,17 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     service: "metadata-guardian-tool",
+    version: "2.0.0",
     scannerMode: process.env.VIRUSTOTAL_API_KEY?.trim()
       ? "local+virustotal"
       : "local-only",
     virustotalConfigured: Boolean(process.env.VIRUSTOTAL_API_KEY?.trim()),
+    injectionRules: 30,
+    supportedFormats: [
+      "images (EXIF)", "PDF", "DOCX", "XLSX", "PPTX",
+      "SVG (XSS detection)", "ZIP archives", "EML (phishing detection)",
+      "text files", "legacy .doc"
+    ],
     time: new Date().toISOString(),
   });
 });
@@ -87,5 +94,8 @@ app.use((err, _req, res, _next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`metadata-guardian-tool listening on :${PORT}`);
+  console.log(`metadata-guardian-tool v2.0.0 listening on :${PORT}`);
+  console.log(`  Injection rules: 30`);
+  console.log(`  File types: images, PDF, DOCX, XLSX, PPTX, SVG, ZIP, EML, text`);
+  console.log(`  VirusTotal: ${process.env.VIRUSTOTAL_API_KEY?.trim() ? "enabled" : "not configured"}`);
 });
