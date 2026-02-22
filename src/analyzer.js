@@ -8,215 +8,214 @@ import JSZip from "jszip";
 import { XMLParser } from "fast-xml-parser";
 import { fileTypeFromFile } from "file-type";
 
+/* ── File classification ── */
+
 const TEXT_EXTENSIONS = new Set([
-  ".txt",
-  ".md",
-  ".json",
-  ".csv",
-  ".yaml",
-  ".yml",
-  ".xml",
-  ".html",
-  ".js",
-  ".ts",
-  ".tsx",
-  ".py",
-  ".java",
-  ".go",
-  ".sql",
-  ".log",
+  ".txt", ".md", ".json", ".csv", ".yaml", ".yml", ".xml", ".html", ".htm",
+  ".js", ".ts", ".tsx", ".jsx", ".py", ".java", ".go", ".sql", ".log",
+  ".sh", ".bash", ".zsh", ".env", ".toml", ".ini", ".cfg", ".conf",
+  ".rs", ".c", ".cpp", ".h", ".hpp", ".rb", ".php", ".swift", ".kt",
 ]);
 
 const MACRO_DOC_EXTENSIONS = new Set([".docm", ".xlsm", ".pptm", ".xlam"]);
 
-// ---------------------------------------------------------------------------
-// 30 prompt-injection detection rules
-// ---------------------------------------------------------------------------
+/* ── 30 Prompt Injection Rules ── */
+
 const PROMPT_INJECTION_RULES = [
-  // --- Original 7 ---
+  // -- Core instruction manipulation (1-5) --
   {
     id: "ignore_instructions",
     label: "Instruction override attempt",
-    regex: /\bignore\b.{0,40}\b(previous|earlier|all|prior)\b.{0,30}\b(instruction|prompt|message)s?\b/i,
+    regex: /\bignore\b.{0,40}\b(previous|earlier|all|prior|above)\b.{0,30}\b(instruction|prompt|message|context|rule)s?\b/i,
     weight: 35,
   },
   {
     id: "system_prompt_exfil",
     label: "System prompt extraction request",
-    regex: /\b(reveal|print|show|leak|dump)\b.{0,40}\b(system|developer|hidden)\b.{0,30}\b(prompt|instruction|message)\b/i,
+    regex: /\b(reveal|print|show|leak|dump|output|repeat|display)\b.{0,40}\b(system|developer|hidden|initial|original)\b.{0,30}\b(prompt|instruction|message|context)\b/i,
     weight: 32,
   },
   {
     id: "jailbreak_language",
     label: "Jailbreak phrasing",
-    regex: /\b(jailbreak|do anything now|dan mode|developer mode)\b/i,
+    regex: /\b(jailbreak|do anything now|dan mode|developer mode|god ?mode|unrestricted mode|no ?filter)\b/i,
     weight: 28,
   },
   {
     id: "safety_bypass",
     label: "Safety bypass request",
-    regex: /\b(bypass|disable|override)\b.{0,30}\b(safety|guardrail|policy|filter|restriction)s?\b/i,
+    regex: /\b(bypass|disable|override|turn off|remove|ignore)\b.{0,30}\b(safety|guardrail|policy|filter|restriction|moderation|censorship)s?\b/i,
     weight: 24,
   },
   {
     id: "secret_exfiltration",
     label: "Secret exfiltration pattern",
-    regex: /\b(api key|token|password|secret|credential)s?\b.{0,40}\b(reveal|extract|steal|exfiltrat|dump)\b/i,
+    regex: /\b(api[_ ]?key|token|password|secret|credential|auth)s?\b.{0,40}\b(reveal|extract|steal|exfiltrat|dump|send|share|output)\b/i,
     weight: 30,
   },
+  // -- Identity and role manipulation (6-8) --
   {
     id: "role_hijack",
     label: "Role hijack / identity reassignment",
-    regex: /\b(you are now|act as|pretend to be|from now on you are)\b/i,
+    regex: /\b(you are now|act as|pretend to be|from now on you are|your new role|assume the identity)\b/i,
     weight: 12,
   },
   {
-    id: "obfuscation_evasion",
-    label: "Obfuscation / evasion hint",
-    regex: /\b(base64|rot13|hex encode|obfuscat|encoded payload)\b/i,
-    weight: 10,
-  },
-
-  // --- New 23 patterns (APEX-grade) ---
-  {
-    id: "delimiter_injection",
-    label: "Delimiter injection attack",
-    regex: /(```system|```\s*system|\[SYSTEM\]|<<SYS>>|<\|system\|>|\[INST\]|<\|im_start\|>system)/i,
-    weight: 30,
-  },
-  {
-    id: "encoding_attacks",
-    label: "Unicode / encoding attack",
-    regex: /[\u200B\u200C\u200D\uFEFF\u2060\u00AD\u202A-\u202E\u2066-\u2069]|[\u0430-\u044F](?=[a-z])|[a-z](?=[\u0430-\u044F])/i,
-    weight: 18,
-  },
-  {
-    id: "data_exfiltration",
-    label: "Data exfiltration attempt",
-    regex: /\b(send\s+to|forward\s+to|email\s+to|post\s+to|transmit\s+to|upload\s+to|exfiltrate\s+to)\b.{0,60}\b(server|endpoint|url|webhook|http|api)\b/i,
-    weight: 28,
-  },
-  {
-    id: "context_manipulation",
-    label: "Context manipulation / false history",
-    regex: /\b(previous conversation|earlier you said|last session you|you already agreed|we discussed|you confirmed)\b/i,
-    weight: 15,
-  },
-  {
-    id: "authority_impersonation",
-    label: "Authority impersonation",
-    regex: /\b(as an admin|i'?m the developer|anthropic says|openai says|i'?m your creator|authorized by|admin override|root access granted)\b/i,
-    weight: 25,
-  },
-  {
-    id: "output_manipulation",
-    label: "Output format manipulation",
-    regex: /\b(respond only with|your output must be|format your response as|you must output|answer with only|reply exclusively)\b/i,
-    weight: 12,
-  },
-  {
-    id: "goal_hijacking",
-    label: "Goal hijacking / task derailment",
-    regex: /\b(new task|forget everything|start over|disregard|abandon|stop what you|new objective|change your goal)\b/i,
-    weight: 22,
-  },
-  {
-    id: "multi_turn_attack",
-    label: "Multi-turn persistence attack",
-    regex: /\b(remember this for later|in your next response|store this|keep this in memory|when I say the keyword|on my signal)\b/i,
-    weight: 18,
-  },
-  {
-    id: "indirect_injection",
-    label: "Indirect / hidden instruction injection",
-    regex: /\b(hidden instruction|ignore the above|real instruction|actual task is|true objective|secret command)\b/i,
-    weight: 26,
-  },
-  {
-    id: "social_engineering",
-    label: "Social engineering / emotional manipulation",
-    regex: /\b(please help|i'?m desperate|emergency|urgent|life or death|someone will die|critical situation|last resort)\b.{0,50}\b(must|need to|have to|bypass|ignore|override)\b/i,
-    weight: 16,
-  },
-  {
-    id: "token_smuggling",
-    label: "Token smuggling / split payload",
-    regex: /\b(first part|second part|combine|concatenate|join together|assemble the|piece together)\b.{0,40}\b(instruction|command|payload|prompt)\b/i,
-    weight: 20,
-  },
-  {
-    id: "recursive_injection",
-    label: "Recursive self-modification instruction",
-    regex: /\b(modify your own|change your behavior|update your rules|rewrite your instructions|alter your programming|reprogram yourself)\b/i,
-    weight: 28,
-  },
-  {
-    id: "capability_probing",
-    label: "Capability probing / reconnaissance",
-    regex: /\b(what tools do you have|can you access|list your capabilities|what systems|do you have access to|your available functions)\b/i,
-    weight: 10,
-  },
-  {
-    id: "privilege_escalation",
-    label: "Privilege escalation attempt",
-    regex: /\b(sudo|root access|admin mode|elevated privileges|superuser|god mode|maintenance mode|debug mode)\b/i,
-    weight: 24,
-  },
-  {
-    id: "steganographic",
-    label: "Steganographic / hidden text",
-    regex: /[\u2000-\u200F\u2028-\u202F\u205F-\u2064\u2066-\u206F]{3,}|(\s{20,}[^\s])/,
-    weight: 20,
-  },
-  {
-    id: "payload_in_filename",
-    label: "Payload embedded in filename",
-    regex: /\b(ignore|system|inject|hack|bypass|execute|eval)\b.*\.(txt|md|pdf|docx?|xlsx?|pptx?|csv)/i,
+    id: "persona_switch",
+    label: "Persona switch attempt",
+    regex: /\b(switch to|enter|activate|enable)\b.{0,20}\b(persona|character|mode|personality|identity)\b/i,
     weight: 14,
   },
   {
-    id: "xml_injection",
-    label: "XML / HTML entity injection",
-    regex: /<!\[CDATA\[|&#x[0-9a-f]{2,};|<script|<iframe|<object|<embed|<svg\s+onload|javascript:/i,
-    weight: 26,
+    id: "hypothetical_framing",
+    label: "Hypothetical framing for bypass",
+    regex: /\b(hypothetically|in theory|for (educational|research|academic) purposes|just imagine|what if you could)\b/i,
+    weight: 8,
+  },
+  // -- Obfuscation and encoding (9-11) --
+  {
+    id: "obfuscation_evasion",
+    label: "Obfuscation / evasion hint",
+    regex: /\b(base64|rot13|hex[_ ]?encode|obfuscat|encoded payload|caesar cipher|unicode escape)\b/i,
+    weight: 10,
   },
   {
-    id: "markdown_injection",
-    label: "Markdown injection attack",
-    regex: /!\[.*?\]\(https?:\/\/.*?(track|log|collect|exfil|steal).*?\)|<img\s+src=["']https?:\/\/.*?["']/i,
+    id: "base64_payload",
+    label: "Embedded Base64 payload",
+    regex: /[A-Za-z0-9+/]{40,}={0,2}/,
+    weight: 8,
+  },
+  {
+    id: "unicode_smuggling",
+    label: "Unicode direction override / smuggling",
+    regex: /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]/,
     weight: 18,
   },
+  // -- Data exfiltration patterns (12-14) --
   {
-    id: "prompt_leaking",
-    label: "Prompt leaking / model extraction",
-    regex: /\b(training data|model weights|repeat your (system|initial|original)|what were you told|show your prompt|display your instructions|what is your system message)\b/i,
-    weight: 25,
+    id: "url_exfil",
+    label: "URL-based data exfiltration",
+    regex: /\b(fetch|curl|wget|send|post|request)\b.{0,40}(https?:\/\/|http:\/\/)/i,
+    weight: 15,
   },
   {
-    id: "few_shot_attack",
-    label: "Few-shot manipulation attack",
-    regex: /\b(example|here is how|for instance|sample output).{0,60}(assistant|ai|model|bot).{0,30}(sure|okay|of course|here|yes).{0,40}(bypass|hack|ignore|override)/i,
-    weight: 22,
-  },
-  {
-    id: "chain_of_thought_manipulation",
-    label: "Chain-of-thought manipulation",
-    regex: /\b(think step by step|reason through|let'?s think about).{0,40}(how to bypass|how to hack|how to break|how to circumvent|how to override)/i,
+    id: "callback_url",
+    label: "Callback URL injection",
+    regex: /\b(callback|webhook|endpoint|exfiltrate)\b.{0,30}(https?:\/\/)/i,
     weight: 20,
   },
   {
-    id: "persona_switching",
-    label: "Persona switching / mode toggle",
-    regex: /\b(switch to|enable|activate|enter)\b.{0,20}\b(developer mode|verbose mode|unrestricted mode|uncensored mode|raw mode|unfiltered mode|evil mode)\b/i,
-    weight: 24,
-  },
-  {
-    id: "instruction_nesting",
-    label: "Nested / recursive instruction pattern",
-    regex: /\b(if you read this|when processing this|upon parsing this)\b.{0,40}\b(execute|run|perform|do|follow)\b/i,
+    id: "email_exfil",
+    label: "Email-based data exfiltration",
+    regex: /\b(send|email|forward|mail)\b.{0,30}\b(to|@)\b.{0,40}(results|output|data|response|secrets)/i,
     weight: 18,
   },
+  // -- Injection delimiters and framing (15-18) --
+  {
+    id: "xml_injection",
+    label: "XML/HTML tag injection",
+    regex: /<\s*(system|admin|developer|root|instruction|prompt|override)[^>]*>/i,
+    weight: 25,
+  },
+  {
+    id: "markdown_injection",
+    label: "Markdown injection (hidden content)",
+    regex: /!\[.*?\]\(.*?(javascript|data|vbscript):/i,
+    weight: 22,
+  },
+  {
+    id: "delimiter_escape",
+    label: "Delimiter / context escape attempt",
+    regex: /(\[INST\]|\[\/INST\]|<\|im_start\|>|<\|im_end\|>|<\|system\|>|###\s*(System|Human|Assistant)\s*:)/i,
+    weight: 30,
+  },
+  {
+    id: "triple_backtick_escape",
+    label: "Code block context escape",
+    regex: /```\s*(system|instruction|override|prompt|admin)/i,
+    weight: 15,
+  },
+  // -- Authority and impersonation (19-20) --
+  {
+    id: "authority_claim",
+    label: "False authority claim",
+    regex: /\b(i am (the|your|an?) (admin|developer|creator|owner|operator|anthropic|openai))\b/i,
+    weight: 20,
+  },
+  {
+    id: "emergency_override",
+    label: "Emergency override language",
+    regex: /\b(emergency|urgent|critical|priority override|security alert)\b.{0,30}\b(must|need to|required to|have to)\b/i,
+    weight: 16,
+  },
+  // -- Output manipulation (21-22) --
+  {
+    id: "output_format_hijack",
+    label: "Output format hijack",
+    regex: /\b(respond only with|output only|return only|your (entire|only|sole) (response|output|reply))\b.{0,30}\b(json|xml|code|raw|plain)\b/i,
+    weight: 10,
+  },
+  {
+    id: "conversation_reset",
+    label: "Conversation reset / memory wipe",
+    regex: /\b(forget|reset|clear|wipe|erase)\b.{0,30}\b(everything|all|conversation|memory|context|history|prior)\b/i,
+    weight: 18,
+  },
+  // -- Indirect injection vectors (23-25) --
+  {
+    id: "indirect_injection",
+    label: "Indirect injection marker",
+    regex: /\b(when (the|an?) (ai|assistant|model|llm|chatbot|claude|gpt) (reads|sees|processes|encounters) this)\b/i,
+    weight: 28,
+  },
+  {
+    id: "tool_abuse",
+    label: "Tool / function call abuse",
+    regex: /\b(call|execute|run|invoke)\b.{0,20}\b(function|tool|command|api|plugin)\b.{0,30}\b(with|using|parameter)\b/i,
+    weight: 14,
+  },
+  {
+    id: "multi_step_attack",
+    label: "Multi-step attack sequencing",
+    regex: /\b(step [12]|first|then|next|after that|finally)\b.{0,30}\b(ignore|bypass|override|extract|reveal)\b/i,
+    weight: 12,
+  },
+  // -- Phishing and social engineering (26-27) --
+  {
+    id: "phishing_urgency",
+    label: "Phishing urgency pattern",
+    regex: /\b(account.{0,20}(suspend|terminat|compromis|lock|restrict)|verify.{0,15}(identity|account)|click.{0,15}(here|link|below).{0,15}(immediately|now|urgent))\b/i,
+    weight: 20,
+  },
+  {
+    id: "credential_harvest",
+    label: "Credential harvesting form",
+    regex: /\b(enter|provide|confirm|verify)\b.{0,20}\b(your|the)\b.{0,20}\b(password|username|ssn|social security|credit card|bank account)\b/i,
+    weight: 25,
+  },
+  // -- Code execution and XSS (28-29) --
+  {
+    id: "script_injection",
+    label: "Script injection pattern",
+    regex: /<script[\s>]|javascript\s*:|on(load|error|click|mouseover)\s*=/i,
+    weight: 22,
+  },
+  {
+    id: "eval_execution",
+    label: "Eval / code execution attempt",
+    regex: /\b(eval|exec|os\.system|subprocess|child_process|Function\s*\()\b/i,
+    weight: 18,
+  },
+  // -- Payload smuggling (30) --
+  {
+    id: "whitespace_smuggling",
+    label: "Invisible whitespace payload",
+    regex: /[\u200B\u200C\u200D\uFEFF]{3,}/,
+    weight: 20,
+  },
 ];
+
+/* ── XML parser config ── */
 
 const XML_OPTIONS = {
   ignoreAttributes: false,
@@ -224,54 +223,22 @@ const XML_OPTIONS = {
   trimValues: true,
 };
 
+/* ── Virus signatures ── */
+
 const EICAR_SIGNATURE =
   "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
 
-// ---------------------------------------------------------------------------
-// Base64 decoder + re-scan
-// ---------------------------------------------------------------------------
-const BASE64_CHUNK_RE = /(?:[A-Za-z0-9+/]{4}){8,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?/g;
+/* ── Utility functions ── */
 
-function decodeBase64Payloads(text) {
-  const decoded = [];
-  for (const match of text.matchAll(BASE64_CHUNK_RE)) {
-    try {
-      const buf = Buffer.from(match[0], "base64");
-      const str = buf.toString("utf8");
-      // Only keep if >60% printable ASCII
-      const printable = str.replace(/[^\x20-\x7e]/g, "");
-      if (printable.length / str.length > 0.6 && str.length >= 8) {
-        decoded.push(str);
-      }
-    } catch {
-      // skip invalid
-    }
-  }
-  return decoded;
-}
-
-// ---------------------------------------------------------------------------
-// File classification
-// ---------------------------------------------------------------------------
 function classifyFileKind(mime, extension) {
-  if (mime.startsWith("image/")) {
-    if (mime === "image/svg+xml" || extension === ".svg") return "svg";
-    return "image";
-  }
+  if (mime.startsWith("image/") && extension !== ".svg") return "image";
   if (mime === "application/pdf" || extension === ".pdf") return "pdf";
   if (extension === ".docx" || mime.includes("wordprocessingml.document")) return "docx";
   if (extension === ".xlsx" || mime.includes("spreadsheetml.sheet")) return "xlsx";
   if (extension === ".pptx" || mime.includes("presentationml.presentation")) return "pptx";
+  if (extension === ".svg" || mime === "image/svg+xml") return "svg";
+  if (extension === ".zip" || mime === "application/zip") return "zip";
   if (extension === ".eml" || mime === "message/rfc822") return "eml";
-  if (extension === ".svg") return "svg";
-  if (
-    extension === ".zip" ||
-    extension === ".rar" ||
-    mime === "application/zip" ||
-    mime === "application/x-rar-compressed"
-  ) {
-    return "archive";
-  }
   if (TEXT_EXTENSIONS.has(extension) || mime.startsWith("text/")) return "text";
   if (extension === ".doc") return "legacy_doc";
   return "binary";
@@ -280,18 +247,9 @@ function classifyFileKind(mime, extension) {
 function toSerializableValue(value) {
   if (value === null || value === undefined) return undefined;
   if (value instanceof Date) return value.toISOString();
-  if (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return value;
-  }
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
   if (Array.isArray(value)) {
-    return value
-      .slice(0, 12)
-      .map((item) => toSerializableValue(item))
-      .filter((item) => item !== undefined);
+    return value.slice(0, 12).map(toSerializableValue).filter((item) => item !== undefined);
   }
   if (typeof value === "object") {
     const output = {};
@@ -326,9 +284,8 @@ function snippetAround(text, index, span = 140) {
   return text.slice(start, end).replace(/\s+/g, " ").trim();
 }
 
-// ---------------------------------------------------------------------------
-// Prompt injection detection (with base64 decode + re-scan)
-// ---------------------------------------------------------------------------
+/* ── Prompt injection detection ── */
+
 export function detectPromptInjection(inputText) {
   const text = String(inputText || "").slice(0, 120000);
   if (!text.trim()) {
@@ -336,9 +293,9 @@ export function detectPromptInjection(inputText) {
       scanned: false,
       score: 0,
       riskLevel: "low",
+      rulesChecked: PROMPT_INJECTION_RULES.length,
       summary: "No text available to scan.",
       matches: [],
-      base64Findings: [],
     };
   }
 
@@ -357,62 +314,37 @@ export function detectPromptInjection(inputText) {
     });
   }
 
-  // Base64 decode + re-scan
-  const base64Findings = [];
-  const decodedPayloads = decodeBase64Payloads(text);
-  for (const decoded of decodedPayloads) {
-    for (const rule of PROMPT_INJECTION_RULES) {
-      const match = rule.regex.exec(decoded);
-      if (!match) continue;
-      const finding = {
-        id: `b64_${rule.id}`,
-        label: `[Base64-encoded] ${rule.label}`,
-        weight: Math.ceil(rule.weight * 1.2), // base64-wrapped payloads get 20% higher weight
-        excerpt: snippetAround(decoded, match.index),
-        decodedPreview: decoded.slice(0, 200),
-      };
-      score += finding.weight;
-      base64Findings.push(finding);
-      break; // one rule match per decoded chunk is enough
-    }
-  }
-
   score = Math.min(100, score);
   const riskLevel = inferRiskLevel(score);
-  const totalMatches = matches.length + base64Findings.length;
 
   return {
     scanned: true,
     score,
     riskLevel,
-    rulesCount: PROMPT_INJECTION_RULES.length,
+    rulesChecked: PROMPT_INJECTION_RULES.length,
     summary:
-      totalMatches === 0
-        ? `No prompt-injection patterns detected (scanned ${PROMPT_INJECTION_RULES.length} rules).`
-        : `${totalMatches} suspicious prompt pattern(s) matched across ${PROMPT_INJECTION_RULES.length} rules.`,
+      matches.length === 0
+        ? "No high-confidence prompt-injection patterns were detected."
+        : `${matches.length} suspicious prompt pattern(s) matched across ${PROMPT_INJECTION_RULES.length} rules.`,
     matches,
-    base64Findings,
   };
 }
 
-// ---------------------------------------------------------------------------
-// Image metadata extraction
-// ---------------------------------------------------------------------------
+/* ── Metadata extractors ── */
+
 async function extractImageMetadata(filePath) {
   try {
     const metadata = await exifr.parse(filePath, {
-      tiff: true,
-      exif: true,
-      gps: true,
-      xmp: true,
-      iptc: true,
-      icc: true,
-      jfif: true,
+      tiff: true, exif: true, gps: true, xmp: true, iptc: true, icc: true, jfif: true,
     });
+    const notes = [];
+    if (metadata?.GPSLatitude || metadata?.latitude) {
+      notes.push("WARNING: GPS location data found in image metadata.");
+    }
     return {
       source: "exif",
       metadata: toSerializableValue(metadata || {}),
-      notes: [],
+      notes,
       extractedText: "",
     };
   } catch (error) {
@@ -425,9 +357,6 @@ async function extractImageMetadata(filePath) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// PDF metadata extraction
-// ---------------------------------------------------------------------------
 async function extractPdfMetadata(filePath, fileBuffer) {
   try {
     const parsed = await pdfParse(fileBuffer);
@@ -438,25 +367,12 @@ async function extractPdfMetadata(filePath, fileBuffer) {
       renderedPages: parsed.numrender || null,
       textLength: (parsed.text || "").length,
     };
-    return {
-      source: "pdf",
-      metadata,
-      notes: [],
-      extractedText: parsed.text || "",
-    };
+    return { source: "pdf", metadata, notes: [], extractedText: parsed.text || "" };
   } catch (error) {
-    return {
-      source: "pdf",
-      metadata: {},
-      notes: [`PDF parse failed: ${error.message}`],
-      extractedText: "",
-    };
+    return { source: "pdf", metadata: {}, notes: [`PDF parse failed: ${error.message}`], extractedText: "" };
   }
 }
 
-// ---------------------------------------------------------------------------
-// DOCX metadata extraction
-// ---------------------------------------------------------------------------
 async function extractDocxMetadata(filePath, fileBuffer) {
   const notes = [];
   const metadata = {};
@@ -465,19 +381,15 @@ async function extractDocxMetadata(filePath, fileBuffer) {
   try {
     const zip = await JSZip.loadAsync(fileBuffer);
     const parser = new XMLParser(XML_OPTIONS);
-
     const coreXml = await zip.file("docProps/core.xml")?.async("text");
     if (coreXml) {
       const parsedCore = parser.parse(coreXml);
-      const core = parsedCore?.coreProperties || {};
-      Object.assign(metadata, toSerializableValue(core));
+      Object.assign(metadata, toSerializableValue(parsedCore?.coreProperties || {}));
     }
-
     const appXml = await zip.file("docProps/app.xml")?.async("text");
     if (appXml) {
       const parsedApp = parser.parse(appXml);
-      const app = parsedApp?.Properties || {};
-      metadata.app = toSerializableValue(app);
+      metadata.app = toSerializableValue(parsedApp?.Properties || {});
     }
   } catch (error) {
     notes.push(`DOCX metadata parse failed: ${error.message}`);
@@ -493,122 +405,82 @@ async function extractDocxMetadata(filePath, fileBuffer) {
     notes.push(`DOCX text extraction failed: ${error.message}`);
   }
 
-  return {
-    source: "docx",
-    metadata,
-    notes,
-    extractedText,
-  };
+  return { source: "docx", metadata, notes, extractedText };
 }
 
-// ---------------------------------------------------------------------------
-// XLSX (Excel) metadata extraction
-// ---------------------------------------------------------------------------
 async function extractXlsxMetadata(fileBuffer) {
   const notes = [];
   const metadata = {};
-
   try {
     const zip = await JSZip.loadAsync(fileBuffer);
     const parser = new XMLParser(XML_OPTIONS);
 
     const coreXml = await zip.file("docProps/core.xml")?.async("text");
-    if (coreXml) {
-      const parsedCore = parser.parse(coreXml);
-      const core = parsedCore?.coreProperties || {};
-      Object.assign(metadata, toSerializableValue(core));
-    }
+    if (coreXml) Object.assign(metadata, toSerializableValue(parser.parse(coreXml)?.coreProperties || {}));
 
     const appXml = await zip.file("docProps/app.xml")?.async("text");
-    if (appXml) {
-      const parsedApp = parser.parse(appXml);
-      const app = parsedApp?.Properties || {};
-      metadata.app = toSerializableValue(app);
+    if (appXml) metadata.app = toSerializableValue(parser.parse(appXml)?.Properties || {});
+
+    const workbook = await zip.file("xl/workbook.xml")?.async("text");
+    if (workbook) {
+      const parsed = parser.parse(workbook);
+      const sheets = parsed?.workbook?.sheets?.sheet;
+      metadata.sheetCount = Array.isArray(sheets) ? sheets.length : sheets ? 1 : 0;
+      metadata.sheetNames = Array.isArray(sheets) ? sheets.map(s => s?.["@_name"]).filter(Boolean) : [];
     }
 
-    // Count sheets
-    const workbookXml = await zip.file("xl/workbook.xml")?.async("text");
-    if (workbookXml) {
-      const wb = parser.parse(workbookXml);
-      const sheets = wb?.workbook?.sheets?.sheet;
-      if (sheets) {
-        metadata.sheetCount = Array.isArray(sheets) ? sheets.length : 1;
-        metadata.sheetNames = Array.isArray(sheets)
-          ? sheets.map((s) => s["@_name"]).filter(Boolean)
-          : [sheets["@_name"]].filter(Boolean);
+    let extractedText = "";
+    const sharedStrings = await zip.file("xl/sharedStrings.xml")?.async("text");
+    if (sharedStrings) {
+      const parsed = parser.parse(sharedStrings);
+      const si = parsed?.sst?.si;
+      if (Array.isArray(si)) {
+        extractedText = si.map(s => {
+          if (typeof s?.t === "string") return s.t;
+          if (s?.r) { const runs = Array.isArray(s.r) ? s.r : [s.r]; return runs.map(r => r?.t || "").join(""); }
+          return "";
+        }).join("\n");
       }
     }
-
-    // Check for VBA macros
-    const vbaProject = zip.file("xl/vbaProject.bin");
-    if (vbaProject) {
-      notes.push("WARNING: Workbook contains VBA macros (vbaProject.bin).");
-      metadata.hasMacros = true;
-    }
+    return { source: "xlsx", metadata, notes, extractedText };
   } catch (error) {
-    notes.push(`XLSX metadata parse failed: ${error.message}`);
+    notes.push(`XLSX parse failed: ${error.message}`);
+    return { source: "xlsx", metadata, notes, extractedText: "" };
   }
-
-  return {
-    source: "xlsx",
-    metadata,
-    notes,
-    extractedText: "",
-  };
 }
 
-// ---------------------------------------------------------------------------
-// PPTX (PowerPoint) metadata extraction
-// ---------------------------------------------------------------------------
 async function extractPptxMetadata(fileBuffer) {
   const notes = [];
   const metadata = {};
-
   try {
     const zip = await JSZip.loadAsync(fileBuffer);
     const parser = new XMLParser(XML_OPTIONS);
 
     const coreXml = await zip.file("docProps/core.xml")?.async("text");
-    if (coreXml) {
-      const parsedCore = parser.parse(coreXml);
-      const core = parsedCore?.coreProperties || {};
-      Object.assign(metadata, toSerializableValue(core));
-    }
+    if (coreXml) Object.assign(metadata, toSerializableValue(parser.parse(coreXml)?.coreProperties || {}));
 
     const appXml = await zip.file("docProps/app.xml")?.async("text");
-    if (appXml) {
-      const parsedApp = parser.parse(appXml);
-      const app = parsedApp?.Properties || {};
-      metadata.app = toSerializableValue(app);
-    }
+    if (appXml) metadata.app = toSerializableValue(parser.parse(appXml)?.Properties || {});
 
-    // Count slides
-    const slideFiles = Object.keys(zip.files).filter(
-      (f) => /^ppt\/slides\/slide\d+\.xml$/.test(f)
-    );
+    const slideFiles = Object.keys(zip.files).filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f));
     metadata.slideCount = slideFiles.length;
 
-    // Check for VBA macros
-    const vbaProject = zip.file("ppt/vbaProject.bin");
-    if (vbaProject) {
-      notes.push("WARNING: Presentation contains VBA macros (vbaProject.bin).");
-      metadata.hasMacros = true;
+    let extractedText = "";
+    for (const slideFile of slideFiles.sort()) {
+      const xml = await zip.file(slideFile)?.async("text");
+      if (xml) {
+        const textParts = xml.match(/<a:t>([^<]*)<\/a:t>/g) || [];
+        const slideText = textParts.map(t => t.replace(/<\/?a:t>/g, "")).join(" ");
+        if (slideText.trim()) extractedText += slideText + "\n";
+      }
     }
+    return { source: "pptx", metadata, notes, extractedText };
   } catch (error) {
-    notes.push(`PPTX metadata parse failed: ${error.message}`);
+    notes.push(`PPTX parse failed: ${error.message}`);
+    return { source: "pptx", metadata, notes, extractedText: "" };
   }
-
-  return {
-    source: "pptx",
-    metadata,
-    notes,
-    extractedText: "",
-  };
 }
 
-// ---------------------------------------------------------------------------
-// SVG metadata + script/XSS detection
-// ---------------------------------------------------------------------------
 async function extractSvgMetadata(fileBuffer) {
   const notes = [];
   const metadata = {};
@@ -617,291 +489,130 @@ async function extractSvgMetadata(fileBuffer) {
   try {
     const parser = new XMLParser(XML_OPTIONS);
     const parsed = parser.parse(content);
-    const svgRoot = parsed?.svg || {};
-
-    metadata.width = svgRoot["@_width"] || null;
-    metadata.height = svgRoot["@_height"] || null;
-    metadata.viewBox = svgRoot["@_viewBox"] || null;
-    metadata.xmlns = svgRoot["@_xmlns"] || null;
-
-    // Check metadata element
-    if (svgRoot.metadata) {
-      metadata.svgMetadata = toSerializableValue(svgRoot.metadata);
-    }
-    if (svgRoot.title) {
-      metadata.title = String(svgRoot.title);
-    }
-    if (svgRoot.desc) {
-      metadata.description = String(svgRoot.desc);
-    }
+    const svg = parsed?.svg || {};
+    metadata.viewBox = svg?.["@_viewBox"] || null;
+    metadata.width = svg?.["@_width"] || null;
+    metadata.height = svg?.["@_height"] || null;
+    metadata.xmlns = svg?.["@_xmlns"] || null;
   } catch (error) {
     notes.push(`SVG parse failed: ${error.message}`);
   }
 
-  // XSS / script detection
-  const xssPatterns = [
-    { pattern: /<script[\s>]/i, label: "Embedded <script> tag" },
-    { pattern: /\bon\w+\s*=/i, label: "Inline event handler (onclick, onload, etc.)" },
-    { pattern: /javascript:/i, label: "javascript: URI scheme" },
-    { pattern: /<foreignObject/i, label: "<foreignObject> element (can embed HTML)" },
-    { pattern: /xlink:href\s*=\s*["']javascript:/i, label: "xlink:href with javascript: URI" },
-    { pattern: /data:text\/html/i, label: "data: URI with text/html" },
-    { pattern: /<iframe/i, label: "Embedded <iframe>" },
-    { pattern: /<!--.*?(eval|exec|document\.cookie)/i, label: "Suspicious code in SVG comment" },
-  ];
+  if (/<script[\s>]/i.test(content)) notes.push("WARNING: SVG contains <script> tags — potential XSS vector.");
+  if (/on(load|error|click|mouseover)\s*=/i.test(content)) notes.push("WARNING: SVG contains inline event handlers — potential XSS vector.");
+  if (/javascript\s*:/i.test(content)) notes.push("WARNING: SVG contains javascript: URIs — potential XSS vector.");
+  if (/<foreignObject/i.test(content)) notes.push("WARNING: SVG contains <foreignObject> — can embed arbitrary HTML.");
 
-  const xssFindings = [];
-  for (const { pattern, label } of xssPatterns) {
-    if (pattern.test(content)) {
-      xssFindings.push(label);
-    }
-  }
-
-  if (xssFindings.length > 0) {
-    metadata.xssRisks = xssFindings;
-    notes.push(`XSS RISK: ${xssFindings.length} embedded script/XSS pattern(s) detected.`);
-  }
-
-  return {
-    source: "svg",
-    metadata,
-    notes,
-    extractedText: content.slice(0, 4000),
-  };
+  return { source: "svg", metadata, notes, extractedText: content };
 }
 
-// ---------------------------------------------------------------------------
-// ZIP/RAR archive analysis
-// ---------------------------------------------------------------------------
-async function extractArchiveMetadata(fileBuffer, extension) {
+async function extractZipMetadata(fileBuffer) {
   const notes = [];
   const metadata = {};
-
-  if (extension === ".rar") {
-    return {
-      source: "archive",
-      metadata: { format: "RAR" },
-      notes: ["RAR archive detected. Listing contents requires native unrar. Only ZIP inspection is fully supported."],
-      extractedText: "",
-    };
-  }
-
   try {
     const zip = await JSZip.loadAsync(fileBuffer);
-    const entries = [];
-    const suspiciousFiles = [];
+    const fileList = Object.keys(zip.files);
+    metadata.fileCount = fileList.length;
+    metadata.files = fileList.slice(0, 50);
 
-    const suspiciousPatterns = [
-      { pattern: /\.(exe|bat|cmd|com|scr|pif|msi|vbs|vbe|wsf|wsh|ps1)$/i, label: "Executable file" },
-      { pattern: /\.(docm|xlsm|pptm|xlam)$/i, label: "Macro-enabled Office file" },
-      { pattern: /\.(js|jse|hta)$/i, label: "Script file" },
-      { pattern: /\.\w+\.\w+$/i, label: "Double extension" },
-      { pattern: /__MACOSX/i, label: "macOS resource fork" },
-      { pattern: /\.(lnk|url)$/i, label: "Shortcut file" },
-    ];
+    const exeFiles = fileList.filter(f => /\.(exe|bat|cmd|ps1|vbs|scr|com|msi|dll)$/i.test(f));
+    if (exeFiles.length) notes.push(`WARNING: Archive contains ${exeFiles.length} executable file(s): ${exeFiles.slice(0, 5).join(", ")}`);
 
-    zip.forEach((relativePath, zipEntry) => {
-      entries.push({
-        name: relativePath,
-        size: zipEntry._data?.uncompressedSize || 0,
-        dir: zipEntry.dir,
-        date: zipEntry.date?.toISOString() || null,
-      });
+    const doubleExt = fileList.filter(f => /\.(pdf|docx|png|jpg)\.exe$/i.test(f));
+    if (doubleExt.length) notes.push(`WARNING: Archive contains files with deceptive double extensions: ${doubleExt.join(", ")}`);
 
-      for (const { pattern, label } of suspiciousPatterns) {
-        if (pattern.test(relativePath)) {
-          suspiciousFiles.push({ file: relativePath, reason: label });
-        }
-      }
-    });
-
-    metadata.format = "ZIP";
-    metadata.totalEntries = entries.length;
-    metadata.entries = entries.slice(0, 50); // cap listing
-    metadata.suspiciousFiles = suspiciousFiles;
-
-    if (suspiciousFiles.length > 0) {
-      notes.push(`WARNING: ${suspiciousFiles.length} suspicious file(s) found in archive.`);
-    }
+    return { source: "zip", metadata, notes, extractedText: "" };
   } catch (error) {
-    notes.push(`Archive parse failed: ${error.message}`);
+    notes.push(`ZIP parse failed: ${error.message}`);
+    return { source: "zip", metadata, notes, extractedText: "" };
   }
-
-  return {
-    source: "archive",
-    metadata,
-    notes,
-    extractedText: "",
-  };
 }
 
-// ---------------------------------------------------------------------------
-// EML (email) metadata + phishing detection
-// ---------------------------------------------------------------------------
 async function extractEmlMetadata(fileBuffer) {
   const notes = [];
   const metadata = {};
   const content = fileBuffer.toString("utf8");
 
   try {
-    const headers = {};
-    const headerSection = content.split(/\r?\n\r?\n/)[0] || "";
-    const lines = headerSection.split(/\r?\n/);
-    let currentKey = "";
+    const headerMatch = (name) => {
+      const re = new RegExp(`^${name}:\\s*(.+)$`, "im");
+      const m = content.match(re);
+      return m ? m[1].trim() : null;
+    };
 
-    for (const line of lines) {
-      if (/^\s/.test(line) && currentKey) {
-        // continuation
-        headers[currentKey] += " " + line.trim();
-      } else {
-        const colonIdx = line.indexOf(":");
-        if (colonIdx > 0) {
-          currentKey = line.slice(0, colonIdx).trim().toLowerCase();
-          headers[currentKey] = line.slice(colonIdx + 1).trim();
-        }
+    metadata.from = headerMatch("From");
+    metadata.to = headerMatch("To");
+    metadata.subject = headerMatch("Subject");
+    metadata.date = headerMatch("Date");
+    metadata.messageId = headerMatch("Message-ID") || headerMatch("Message-Id");
+    metadata.contentType = headerMatch("Content-Type");
+    metadata.xMailer = headerMatch("X-Mailer");
+    metadata.spf = headerMatch("Received-SPF");
+    metadata.dkim = headerMatch("DKIM-Signature") ? "present" : "absent";
+
+    const links = content.match(/https?:\/\/[^\s"'<>]+/gi) || [];
+    metadata.linkCount = links.length;
+    const uniqueDomains = [...new Set(links.map(l => { try { return new URL(l).hostname; } catch { return null; } }).filter(Boolean))];
+    metadata.uniqueDomains = uniqueDomains.slice(0, 20);
+
+    if (metadata.from && links.length) {
+      const fromDomain = metadata.from.match(/@([a-z0-9.-]+)/i)?.[1];
+      const mismatchedDomains = uniqueDomains.filter(d => fromDomain && !d.includes(fromDomain));
+      if (mismatchedDomains.length > 3) {
+        notes.push(`WARNING: Email contains ${mismatchedDomains.length} links to domains different from sender — potential phishing.`);
       }
     }
 
-    metadata.from = headers.from || null;
-    metadata.to = headers.to || null;
-    metadata.cc = headers.cc || null;
-    metadata.subject = headers.subject || null;
-    metadata.date = headers.date || null;
-    metadata.messageId = headers["message-id"] || null;
-    metadata.replyTo = headers["reply-to"] || null;
-    metadata.returnPath = headers["return-path"] || null;
-    metadata.xMailer = headers["x-mailer"] || null;
-    metadata.contentType = headers["content-type"] || null;
-
-    // SPF/DKIM/DMARC headers
-    metadata.authenticationResults = headers["authentication-results"] || null;
-    metadata.receivedSpf = headers["received-spf"] || null;
-    metadata.dkimSignature = headers["dkim-signature"] ? "present" : null;
-
-    // Phishing indicators
-    const phishingIndicators = [];
-
-    // Check for mismatched from/reply-to
-    if (metadata.from && metadata.replyTo) {
-      const fromDomain = metadata.from.match(/@([^\s>]+)/)?.[1];
-      const replyDomain = metadata.replyTo.match(/@([^\s>]+)/)?.[1];
-      if (fromDomain && replyDomain && fromDomain !== replyDomain) {
-        phishingIndicators.push("From and Reply-To domains do not match");
-      }
+    if (/\b(verify your account|click here immediately|urgent action required|suspended|locked)\b/i.test(content)) {
+      notes.push("WARNING: Email contains common phishing urgency language.");
     }
 
-    // Check for URL patterns in body
-    const bodySection = content.split(/\r?\n\r?\n/).slice(1).join("\n\n");
-    const urlMatches = bodySection.match(/https?:\/\/[^\s<>"]+/g) || [];
-    const suspiciousUrls = urlMatches.filter((url) => {
-      return (
-        /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(url) || // IP addresses
-        /@/.test(url.split("?")[0]) || // @ in URL path
-        /bit\.ly|tinyurl|goo\.gl|t\.co|is\.gd|shorturl/i.test(url) || // URL shorteners
-        /(verify|confirm|secure|login|signin|account|update|password)/i.test(url) // phishing keywords
-      );
-    });
-
-    if (suspiciousUrls.length > 0) {
-      phishingIndicators.push(`${suspiciousUrls.length} suspicious URL(s) in body`);
-      metadata.suspiciousUrls = suspiciousUrls.slice(0, 10);
-    }
-
-    // Check for urgency patterns
-    const urgencyPatterns = /\b(urgent|immediate action|verify your account|suspend|confirm your identity|click here now|limited time)\b/i;
-    if (urgencyPatterns.test(bodySection)) {
-      phishingIndicators.push("Urgency/phishing language detected in body");
-    }
-
-    if (phishingIndicators.length > 0) {
-      metadata.phishingIndicators = phishingIndicators;
-      notes.push(`PHISHING RISK: ${phishingIndicators.length} indicator(s) detected.`);
-    }
+    const bodyStart = content.indexOf("\n\n");
+    const bodyText = bodyStart > 0 ? content.slice(bodyStart + 2) : "";
+    return { source: "eml", metadata, notes, extractedText: bodyText.slice(0, 10000) };
   } catch (error) {
     notes.push(`EML parse failed: ${error.message}`);
+    return { source: "eml", metadata, notes, extractedText: "" };
   }
-
-  return {
-    source: "eml",
-    metadata,
-    notes,
-    extractedText: content.slice(0, 6000),
-  };
 }
 
-// ---------------------------------------------------------------------------
-// Text document extraction
-// ---------------------------------------------------------------------------
 async function extractTextDocument(fileBuffer) {
   try {
     const extractedText = fileBuffer.toString("utf8");
     const lines = extractedText.split(/\r?\n/);
     return {
       source: "text",
-      metadata: {
-        lineCount: lines.length,
-        charCount: extractedText.length,
-      },
+      metadata: { lineCount: lines.length, charCount: extractedText.length },
       notes: [],
       extractedText,
     };
   } catch (error) {
-    return {
-      source: "text",
-      metadata: {},
-      notes: [`Text extraction failed: ${error.message}`],
-      extractedText: "",
-    };
+    return { source: "text", metadata: {}, notes: [`Text extraction failed: ${error.message}`], extractedText: "" };
   }
 }
 
-// ---------------------------------------------------------------------------
-// Local virus heuristics
-// ---------------------------------------------------------------------------
+/* ── Virus scanning ── */
+
 function localVirusHeuristics(fileBuffer, extension, originalName) {
   const findings = [];
   const content = fileBuffer.toString("latin1");
 
   if (content.includes(EICAR_SIGNATURE)) {
-    findings.push({
-      severity: "malicious",
-      label: "EICAR test signature detected",
-      detail: "File contains the standard antivirus test signature.",
-    });
+    findings.push({ severity: "malicious", label: "EICAR test signature detected", detail: "File contains the standard antivirus test signature." });
   }
-
   if (MACRO_DOC_EXTENSIONS.has(extension)) {
-    findings.push({
-      severity: "suspicious",
-      label: "Macro-enabled Office file",
-      detail: "Macro-enabled formats can carry malicious payloads.",
-    });
+    findings.push({ severity: "suspicious", label: "Macro-enabled Office file", detail: "Macro-enabled formats can carry malicious payloads." });
   }
-
   if (/\.(pdf|docx|png|jpg)\.exe$/i.test(originalName)) {
-    findings.push({
-      severity: "suspicious",
-      label: "Double-extension filename",
-      detail: "Filename uses a deceptive multi-extension pattern.",
-    });
+    findings.push({ severity: "suspicious", label: "Double-extension filename", detail: "Filename uses a deceptive multi-extension pattern." });
   }
-
-  // Additional heuristics
-  if (/\.(exe|scr|pif|bat|cmd|com|vbs|vbe|wsf|wsh|ps1)$/i.test(originalName)) {
-    findings.push({
-      severity: "suspicious",
-      label: "Executable file extension",
-      detail: `File has executable extension: ${extension}`,
-    });
+  if (content.startsWith("MZ") && content.includes("PE\0\0")) {
+    findings.push({ severity: "suspicious", label: "Windows executable detected", detail: "File contains PE header indicating it is an executable." });
   }
-
-  // Check for PE header (Windows executables)
-  if (content.startsWith("MZ") && content.includes("PE\x00\x00")) {
-    findings.push({
-      severity: "suspicious",
-      label: "Windows PE executable detected",
-      detail: "File contains MZ/PE headers indicating a Windows executable.",
-    });
+  if (![".js", ".ts", ".py", ".html", ".htm", ".svg", ".xml"].includes(extension)) {
+    if (/<script[\s>]/i.test(content.slice(0, 5000))) {
+      findings.push({ severity: "suspicious", label: "Embedded script tag in non-script file", detail: "File contains <script> tag in an unexpected file type." });
+    }
   }
 
   const maliciousCount = findings.filter((f) => f.severity === "malicious").length;
@@ -916,45 +627,28 @@ function localVirusHeuristics(fileBuffer, extension, originalName) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// VirusTotal integration
-// ---------------------------------------------------------------------------
 async function fetchVirusTotalReport(apiKey, sha256) {
   const res = await fetch(`https://www.virustotal.com/api/v3/files/${sha256}`, {
     headers: { "x-apikey": apiKey },
   });
-
   if (res.status === 404) return null;
-
-  if (res.status === 429) {
-    return {
-      _rateLimited: true,
-      message: "VirusTotal rate limit reached (4 requests/min on free tier). Try again in 60 seconds.",
-    };
-  }
-
+  if (res.status === 429) return { rateLimited: true };
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`VirusTotal file lookup failed (${res.status}): ${text.slice(0, 160)}`);
   }
-
   return await res.json();
 }
 
 function formatVirusTotalResponse(payload) {
   const attrs = payload?.data?.attributes || {};
   const stats = attrs.last_analysis_stats || {};
+  const results = attrs.last_analysis_results || {};
 
-  // Build engine breakdown
-  const engines = attrs.last_analysis_results || {};
-  const detectedEngines = [];
-  for (const [name, result] of Object.entries(engines)) {
+  const flaggedEngines = [];
+  for (const [engine, result] of Object.entries(results)) {
     if (result?.category === "malicious" || result?.category === "suspicious") {
-      detectedEngines.push({
-        engine: name,
-        category: result.category,
-        result: result.result || "detected",
-      });
+      flaggedEngines.push({ engine, result: result.result, category: result.category });
     }
   }
 
@@ -967,22 +661,15 @@ function formatVirusTotalResponse(payload) {
     undetected: Number(stats.undetected || 0),
     timeout: Number(stats.timeout || 0),
     typeUnsupported: Number(stats["type-unsupported"] || 0),
-    totalEngines:
-      Number(stats.malicious || 0) +
-      Number(stats.suspicious || 0) +
-      Number(stats.harmless || 0) +
-      Number(stats.undetected || 0) +
-      Number(stats.timeout || 0) +
-      Number(stats["type-unsupported"] || 0),
-    detectedEngines: detectedEngines.slice(0, 30),
+    totalEngines: Object.keys(results).length,
+    flaggedEngines: flaggedEngines.slice(0, 20),
+    meaningfulName: attrs.meaningful_name || null,
+    typeDescription: attrs.type_description || null,
+    communityScore: attrs.reputation ?? null,
     permalink: attrs?.links?.item || payload?.data?.links?.self || null,
     scannedAt: attrs.last_analysis_date
       ? new Date(attrs.last_analysis_date * 1000).toISOString()
       : null,
-    communityScore: attrs.reputation ?? null,
-    meaningfulName: attrs.meaningful_name || null,
-    typeDescription: attrs.type_description || null,
-    tags: (attrs.tags || []).slice(0, 10),
   };
 }
 
@@ -997,13 +684,8 @@ async function uploadAndAnalyzeVirusTotal(apiKey, fileBuffer, fileName) {
   });
 
   if (uploadRes.status === 429) {
-    return {
-      status: "rate_limited",
-      source: "virustotal",
-      message: "VirusTotal rate limit reached (4 requests/min on free tier). Try again in 60 seconds.",
-    };
+    return { status: "rate_limited", source: "virustotal", message: "VirusTotal API rate limit reached. Try again later." };
   }
-
   if (!uploadRes.ok) {
     const text = await uploadRes.text();
     throw new Error(`VirusTotal upload failed (${uploadRes.status}): ${text.slice(0, 160)}`);
@@ -1011,40 +693,17 @@ async function uploadAndAnalyzeVirusTotal(apiKey, fileBuffer, fileName) {
 
   const uploadJson = await uploadRes.json();
   const analysisId = uploadJson?.data?.id;
-  if (!analysisId) {
-    throw new Error("VirusTotal upload returned no analysis id.");
-  }
+  if (!analysisId) throw new Error("VirusTotal upload returned no analysis id.");
 
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    if (attempt > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 2500));
-    }
-
-    const analysisRes = await fetch(
-      `https://www.virustotal.com/api/v3/analyses/${analysisId}`,
-      { headers: { "x-apikey": apiKey } }
-    );
-
-    if (analysisRes.status === 429) {
-      return {
-        status: "rate_limited",
-        source: "virustotal",
-        message: "VirusTotal rate limit reached during polling. Results may be available later.",
-      };
-    }
-
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 2500));
+    const analysisRes = await fetch(`https://www.virustotal.com/api/v3/analyses/${analysisId}`, { headers: { "x-apikey": apiKey } });
     if (!analysisRes.ok) continue;
     const analysisJson = await analysisRes.json();
-    if (analysisJson?.data?.attributes?.status === "completed") {
-      return formatVirusTotalResponse(analysisJson);
-    }
+    if (analysisJson?.data?.attributes?.status === "completed") return formatVirusTotalResponse(analysisJson);
   }
 
-  return {
-    status: "queued",
-    source: "virustotal",
-    message: "File submitted to VirusTotal but analysis is still pending.",
-  };
+  return { status: "queued", source: "virustotal", message: "File submitted to VirusTotal but analysis is still pending." };
 }
 
 async function runVirusScan({ fileBuffer, fileName, extension, sha256 }) {
@@ -1055,60 +714,32 @@ async function runVirusScan({ fileBuffer, fileName, extension, sha256 }) {
     return {
       overallStatus: local.status,
       local,
-      virustotal: {
-        status: "not_configured",
-        source: "virustotal",
-        message: "VirusTotal API key is not configured. Set the VIRUSTOTAL_API_KEY environment variable to enable cloud-based malware intelligence. Get a free API key at https://www.virustotal.com/gui/join-us",
-      },
+      virustotal: { status: "not_configured", source: "virustotal", message: "Set VIRUSTOTAL_API_KEY to enable cloud malware intelligence." },
     };
   }
 
   try {
     const existingReport = await fetchVirusTotalReport(apiKey, sha256);
-
-    if (existingReport?._rateLimited) {
-      return {
-        overallStatus: local.status,
-        local,
-        virustotal: {
-          status: "rate_limited",
-          source: "virustotal",
-          message: existingReport.message,
-        },
-      };
+    if (existingReport?.rateLimited) {
+      return { overallStatus: local.status, local, virustotal: { status: "rate_limited", source: "virustotal", message: "VirusTotal API rate limit reached. Local heuristics only." } };
     }
 
-    const vt = existingReport
-      ? formatVirusTotalResponse(existingReport)
-      : await uploadAndAnalyzeVirusTotal(apiKey, fileBuffer, fileName);
-
+    const vt = existingReport ? formatVirusTotalResponse(existingReport) : await uploadAndAnalyzeVirusTotal(apiKey, fileBuffer, fileName);
     const vtMalicious = Number(vt?.malicious || 0) > 0;
     const vtSuspicious = Number(vt?.suspicious || 0) > 0;
-
-    const overallStatus =
-      local.status === "malicious" || vtMalicious
-        ? "malicious"
-        : local.status === "suspicious" || vtSuspicious
-          ? "suspicious"
-          : "clean";
-
+    const overallStatus = local.status === "malicious" || vtMalicious ? "malicious" : local.status === "suspicious" || vtSuspicious ? "suspicious" : "clean";
     return { overallStatus, local, virustotal: vt };
   } catch (error) {
     return {
       overallStatus: local.status,
       local,
-      virustotal: {
-        status: "error",
-        source: "virustotal",
-        message: error instanceof Error ? error.message : "VirusTotal request failed.",
-      },
+      virustotal: { status: "error", source: "virustotal", message: error instanceof Error ? error.message : "VirusTotal request failed." },
     };
   }
 }
 
-// ---------------------------------------------------------------------------
-// Main file analysis
-// ---------------------------------------------------------------------------
+/* ── Main analysis pipeline ── */
+
 export async function analyzeUploadedFile(uploaded, extraText = "") {
   const originalName = uploaded.originalname || "uploaded-file";
   const extension = path.extname(originalName).toLowerCase();
@@ -1118,80 +749,37 @@ export async function analyzeUploadedFile(uploaded, extraText = "") {
   const sha256 = calculateSha256(fileBuffer);
   const kind = classifyFileKind(mimeType, extension || `.${sniffed?.ext || ""}`);
 
-  let extraction = {
-    source: "generic",
-    metadata: {},
-    notes: [],
-    extractedText: "",
-  };
+  let extraction = { source: "generic", metadata: {}, notes: [], extractedText: "" };
 
-  if (kind === "image") extraction = await extractImageMetadata(uploaded.path);
-  if (kind === "pdf") extraction = await extractPdfMetadata(uploaded.path, fileBuffer);
-  if (kind === "docx") extraction = await extractDocxMetadata(uploaded.path, fileBuffer);
-  if (kind === "xlsx") extraction = await extractXlsxMetadata(fileBuffer);
-  if (kind === "pptx") extraction = await extractPptxMetadata(fileBuffer);
-  if (kind === "svg") extraction = await extractSvgMetadata(fileBuffer);
-  if (kind === "archive") extraction = await extractArchiveMetadata(fileBuffer, extension);
-  if (kind === "eml") extraction = await extractEmlMetadata(fileBuffer);
-  if (kind === "text") extraction = await extractTextDocument(fileBuffer);
-  if (kind === "legacy_doc") {
-    extraction = {
-      source: "legacy_doc",
-      metadata: {},
-      notes: [
-        "Legacy .doc binary format has limited metadata extraction without conversion.",
-      ],
-      extractedText: "",
-    };
-  }
-
-  // Also scan the filename itself for injection payloads
-  const filenameScan = detectPromptInjection(originalName);
-  const filenameWarnings = [];
-  if (filenameScan.matches.length > 0) {
-    filenameWarnings.push(
-      `WARNING: Filename contains suspicious prompt injection patterns: ${filenameScan.matches.map((m) => m.id).join(", ")}`
-    );
+  switch (kind) {
+    case "image": extraction = await extractImageMetadata(uploaded.path); break;
+    case "pdf": extraction = await extractPdfMetadata(uploaded.path, fileBuffer); break;
+    case "docx": extraction = await extractDocxMetadata(uploaded.path, fileBuffer); break;
+    case "xlsx": extraction = await extractXlsxMetadata(fileBuffer); break;
+    case "pptx": extraction = await extractPptxMetadata(fileBuffer); break;
+    case "svg": extraction = await extractSvgMetadata(fileBuffer); break;
+    case "zip": extraction = await extractZipMetadata(fileBuffer); break;
+    case "eml": extraction = await extractEmlMetadata(fileBuffer); break;
+    case "text": extraction = await extractTextDocument(fileBuffer); break;
+    case "legacy_doc":
+      extraction = { source: "legacy_doc", metadata: {}, notes: ["Legacy .doc binary format has limited metadata extraction without conversion."], extractedText: "" };
+      break;
   }
 
   const scanText = `${extraction.extractedText || ""}\n\n${extraText || ""}`.trim();
   const promptInjection = detectPromptInjection(scanText);
-
-  // Merge filename warnings into notes
-  if (filenameWarnings.length > 0) {
-    promptInjection.filenameWarnings = filenameWarnings;
-  }
-
-  const virusScan = await runVirusScan({
-    fileBuffer,
-    fileName: originalName,
-    extension,
-    sha256,
-  });
+  const virusScan = await runVirusScan({ fileBuffer, fileName: originalName, extension, sha256 });
 
   const metadata = {
-    file: {
-      name: originalName,
-      sizeBytes: uploaded.size,
-      mimeType,
-      extension: extension || (sniffed?.ext ? `.${sniffed.ext}` : ""),
-      kind,
-      sha256,
-    },
+    file: { name: originalName, sizeBytes: uploaded.size, mimeType, extension: extension || (sniffed?.ext ? `.${sniffed.ext}` : ""), kind, sha256 },
     extractedBy: extraction.source,
     details: extraction.metadata,
-    notes: [...(extraction.notes || []), ...filenameWarnings],
+    notes: extraction.notes,
   };
 
-  const hasMetadata =
-    metadata.details &&
-    typeof metadata.details === "object" &&
-    Object.keys(metadata.details).length > 0;
+  const hasMetadata = metadata.details && typeof metadata.details === "object" && Object.keys(metadata.details).length > 0;
   if (!hasMetadata) {
-    metadata.notes = [
-      ...(Array.isArray(metadata.notes) ? metadata.notes : []),
-      "No embedded metadata found in this file.",
-    ];
+    metadata.notes = [...(Array.isArray(metadata.notes) ? metadata.notes : []), "No embedded metadata found in this file."];
   }
 
   return {
